@@ -16,6 +16,18 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message
+  }
+
+  if (typeof error === 'object' && error !== null) {
+    return JSON.stringify(error)
+  }
+
+  return 'An unexpected error occurred'
+}
+
 export default function Page() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -25,9 +37,21 @@ export default function Page() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    const supabase = createClient()
     setIsLoading(true)
     setError(null)
+
+    const supabase = createClient()
+
+    if (!supabase) {
+      const user = demoLogin(email, password)
+      if (user) {
+        router.replace('/dashboard')
+      } else {
+        setError('Invalid email or password')
+      }
+      setIsLoading(false)
+      return
+    }
 
     try {
       console.log('[v0] Login attempt:', { email })
@@ -39,27 +63,25 @@ export default function Page() {
         console.error('[v0] Auth error:', error)
         throw error
       }
-      console.log('[v0] Login successful:', data)
-      router.push('/dashboard')
+
+      if (data.session) {
+        console.log('[v0] Login successful:', data)
+        router.replace('/dashboard')
+      } else {
+        setError('Please confirm your email before continuing.')
+      }
     } catch (error: unknown) {
       console.error('[v0] Auth failed, using demo auth:', error)
-      // Fallback to demo auth for testing
       try {
         const user = demoLogin(email, password)
         if (user) {
           console.log('[v0] Demo login successful')
-          router.push('/dashboard')
+          router.replace('/dashboard')
         } else {
-          setError('Invalid email or password')
+          setError(getErrorMessage(error) || 'Invalid email or password')
         }
       } catch (demoError) {
-        let errorMessage = 'An error occurred'
-        if (error instanceof Error) {
-          errorMessage = error.message
-        } else if (typeof error === 'object' && error !== null) {
-          errorMessage = JSON.stringify(error)
-        }
-        setError(errorMessage)
+        setError(getErrorMessage(demoError))
       }
     } finally {
       setIsLoading(false)
@@ -72,6 +94,11 @@ export default function Page() {
         <div className="flex flex-col gap-6">
           <Card>
             <CardHeader>
+              <div className="mb-2">
+                <Link href="/" className="text-sm font-medium text-primary underline-offset-4 hover:underline">
+                  ← Back to home
+                </Link>
+              </div>
               <CardTitle className="text-2xl">Login</CardTitle>
               <CardDescription>
                 Enter your email below to login to your account

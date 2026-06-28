@@ -16,6 +16,18 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message
+  }
+
+  if (typeof error === 'object' && error !== null) {
+    return JSON.stringify(error)
+  }
+
+  return 'An unexpected error occurred'
+}
+
 export default function Page() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -26,12 +38,20 @@ export default function Page() {
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
-    const supabase = createClient()
     setIsLoading(true)
     setError(null)
 
     if (password !== repeatPassword) {
       setError('Passwords do not match')
+      setIsLoading(false)
+      return
+    }
+
+    const supabase = createClient()
+
+    if (!supabase) {
+      demoSignUp(email, password)
+      router.replace('/dashboard')
       setIsLoading(false)
       return
     }
@@ -51,23 +71,21 @@ export default function Page() {
         console.error('[v0] Auth error:', error)
         throw error
       }
-      console.log('[v0] Sign-up successful:', data)
-      router.push('/dashboard')
+
+      if (data.session) {
+        console.log('[v0] Sign-up successful:', data)
+        router.replace('/dashboard')
+      } else {
+        setError('Account created. Please check your email to confirm your account before signing in.')
+      }
     } catch (error: unknown) {
       console.error('[v0] Auth failed, using demo auth:', error)
-      // Fallback to demo auth for testing
       try {
         demoSignUp(email, password)
         console.log('[v0] Demo sign-up successful')
-        router.push('/dashboard')
+        router.replace('/dashboard')
       } catch (demoError) {
-        let errorMessage = 'An error occurred'
-        if (error instanceof Error) {
-          errorMessage = error.message
-        } else if (typeof error === 'object' && error !== null) {
-          errorMessage = JSON.stringify(error)
-        }
-        setError(errorMessage)
+        setError(getErrorMessage(demoError))
       }
     } finally {
       setIsLoading(false)
@@ -80,6 +98,11 @@ export default function Page() {
         <div className="flex flex-col gap-6">
           <Card>
             <CardHeader>
+              <div className="mb-2">
+                <Link href="/" className="text-sm font-medium text-primary underline-offset-4 hover:underline">
+                  ← Back to home
+                </Link>
+              </div>
               <CardTitle className="text-2xl">Sign up</CardTitle>
               <CardDescription>Create a new account</CardDescription>
             </CardHeader>
